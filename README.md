@@ -1,50 +1,152 @@
-# WeTriC: Wedge-Parallel Triangle Counting for GPUs
-This repository contains the source code for the WeTriC algorithm from the EuroPar '25 paper ["Wedge-Parallel Triangle Counting for GPUs"](https://link.springer.com/chapter/10.1007/978-3-031-99872-0_1). For the complete artifact, visit the [Zenodo](https://doi.org/10.5281/zenodo.15611507) repository.
+# WeTriC-AutoTune  
+### Adaptive Spread Autotuning for Wedge-Parallel Triangle Counting on GPUs
 
-## Requirements
+This repository extends the WeTriC (Wedge-Parallel Triangle Counting) algorithm from Euro-Par 2025 with an adaptive runtime spread autotuning mechanism.
 
-CUDA (tested on 12.3), cub (part of [CCCL](https://github.com/nvidia/cccl)) (included in the CUDA Toolkit), a c++ compiler.
+Original paper:  
+Spaan et al., “Wedge-Parallel Triangle Counting for GPUs,” Euro-Par 2025  
 
-## Compile & run
+Extension:  
+Çapar & Guluyev, “Adaptive Spread Autotuning for Wedge-Parallel Triangle Counting on GPUs,” 2025  
 
-To compile the code use (and match your target architecture in the `Makefile`, the default is `sm_86`):
+---
 
-    $ make
+## 🚀 Overview
 
-This creates one executable named `tc` which includes both the preprocessing (reading the graph, reodering, etc.) and the GPU code.
+Triangle counting is a core primitive in graph analytics used in:
 
-To clean use:
+- Social network analysis  
+- Clustering coefficient computation  
+- k-truss decomposition  
+- Link prediction  
 
-    $ make clean
+WeTriC achieves excellent GPU load balancing by assigning individual wedges to threads.
 
-To run the code:
+For a vertex v with degree d(v), the number of wedges is:
 
-    $ ./tc -e <edge list graph> -s <spread> -a <adjacency matrix length>
+    C(d(v), 2)
 
-or: 
+Each thread processes one or more wedges depending on the spread parameter (s).
 
-    $ ./tc -m <Matrix Market graph> -s <spread> -a <adjacency matrix length>
+---
 
-Run `./tc` for more usage information.
+## 🎯 The Problem
 
-## Example
+Performance strongly depends on the spread value:
 
-    $ ./tc -m Amazon0302.mtx -s 5 -a 8192 -l 10
+- Low s → better locality, higher overhead  
+- High s → lower overhead, reduced locality  
 
-gives the following output:
+The optimal spread varies across graphs and hardware.  
+Manual tuning is impractical.
 
-    $ graph                                                                       n                m                s                a        triangles       prepro (s)     GPU copy (s)     GPU exec (s)    GPU total (s)      CPU+GPU (s)
-    $ Amazon0302.mtx                                                         262111           899792                5             8192           717719         0.056998         0.002199         0.000407         0.002606         0.003735
-    $ Amazon0302.mtx                                                         262111           899792                5             8192           717719         0.056998         0.002165         0.000406         0.002570         0.004149
-    $ Amazon0302.mtx                                                         262111           899792                5             8192           717719         0.056998         0.002393         0.000438         0.002831         0.004080
-    $ ...
+---
 
-## Experiments
+## 🔥 Our Contribution: Adaptive Spread Autotuning
 
-The experiments folder contains all implementations of all additional algorithms used in the paper. This includes:
+We introduce an automatic runtime mechanism that:
 
-- implementations for different edge-retrieval strategies.
-- an implementation for a wedge-parallel arrow-wedge-style algorithm.
-- implementations for the vertex- and edge-parallel algorithms (with outgoing, arrow, and mixed wedge styles).
-- implementations for WeTriC without optimizations, WeTriC with reordering, and WeTriC with reordering and spreading (note: for WeTriC with reordering, spreading, and cooperation use the main implementation with `-a` set to `0`).
-- implementations for versions of most of the above algorithms able to handle very large graphs (m > 2^32), see the `tc_big_graphs...` files.
+1. Tests candidate spread values  
+2. Respects shared memory constraints  
+3. Measures GPU kernel execution time  
+4. Selects the best-performing spread  
+
+Candidate set:
+
+    S = {1, 2, 3, 4, 6, 7, 8, 10, 12, 16}
+
+### Results
+
+- 83% exact optimal selection  
+- Average performance gap: 1.01×  
+- Worst-case gap: 3%  
+- Negligible overhead in multi-iteration workloads  
+
+No manual tuning required.
+
+---
+
+## ⚙️ Requirements
+
+- CUDA Toolkit (tested on 13.1)
+- NVIDIA GPU (tested on RTX 4060 Laptop GPU)
+- C++ compiler
+- CUB (included in CUDA)
+
+---
+
+## 🔧 Build
+
+Set your GPU architecture in the Makefile (default: sm_86):
+
+```bash
+make
+```
+
+Clean:
+
+```bash
+make clean
+```
+
+---
+
+## ▶️ Run
+
+Matrix Market:
+
+```bash
+./tc -m graph.mtx -s <spread> -a <adj_len>
+```
+
+Edge list:
+
+```bash
+./tc -e graph.txt -s <spread> -a <adj_len>
+```
+
+---
+
+## 🤖 Enable Autotuning
+
+Use the -A flag:
+
+```bash
+./tc -m Amazon0302.mtx -A -a 8192 -l 10
+```
+
+The autotuner runs once, selects the optimal spread, and uses it for benchmarking.
+
+---
+
+## 📁 Repository Structure
+
+```
+src/              Main implementation
+experiments/      Alternative triangle counting variants
+Makefile
+README.md
+```
+
+Includes:
+- Vertex-parallel variants  
+- Edge-parallel variants  
+- Wedge-parallel baselines  
+- Big graph (>2^32 edges) support  
+
+---
+
+## 📌 Why It Matters
+
+Manual tuning:
+- Graph-specific  
+- Hardware-specific  
+- Time-consuming  
+
+Adaptive tuning:
+- Automatic  
+- Hardware-aware  
+- Near-optimal performance  
+- Production-ready  
+
+Just run with `-A` and let the algorithm choose the best configuration.
